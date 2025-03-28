@@ -20,57 +20,65 @@ def initialize_driver():
     chrome_options.add_argument("--disable-dev-shm-usage")  # Evita problemas de recursos em contêineres
     chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")  # Evita detecção de bots
 
-    # Usar webdriver-manager para instalar o ChromeDriver compatível
     try:
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=chrome_options)
-        st.write("ChromeDriver inicializado com sucesso.")
+        st.write("✅ ChromeDriver inicializado com sucesso.")
         return driver
     except Exception as e:
-        st.error(f"Erro ao inicializar o ChromeDriver: {e}")
+        st.error(f"❌ Erro ao inicializar o ChromeDriver: {str(e)}")
         return None
 
 # Função para extrair dados da página
 def extract_data():
     url = "https://balanca.economia.gov.br/balanca/pg_principal_bc/principais_resultados.html"
+    st.write(f"📡 Acessando a URL: {url}")
+    
     driver = initialize_driver()
     if driver is None:
+        st.error("🚫 Falha ao inicializar o driver. Não é possível prosseguir.")
         return None, None
 
     try:
+        st.write("⏳ Carregando a página...")
         driver.get(url)
         WebDriverWait(driver, 15).until(
             EC.presence_of_element_located((By.TAG_NAME, "table"))
         )
         time.sleep(5)  # Espera adicional para garantir que a página carregue completamente
         html = driver.page_source
-        st.write(f"Página carregada com sucesso. Tamanho do HTML: {len(html)}")
+        st.write(f"✅ Página carregada com sucesso. Tamanho do HTML: {len(html)} bytes")
     except Exception as e:
-        st.error(f"Erro ao acessar a página: {e}")
+        st.error(f"❌ Erro ao acessar a página: {str(e)}")
         driver.quit()
         return None, None
     finally:
         driver.quit()
 
     # Parsing do HTML
+    st.write("🔍 Analisando o HTML...")
     soup = BeautifulSoup(html, 'html.parser')
     tables = soup.find_all('table')
     if len(tables) < 2:
-        st.error(f"Esperava-se 2 tabelas, mas foram encontradas {len(tables)}.")
+        st.error(f"🚫 Esperava-se 2 tabelas, mas foram encontradas {len(tables)}. Verifique se a estrutura da página mudou.")
         return None, None
+    st.write(f"✅ Encontradas {len(tables)} tabelas.")
 
     # Extrair tabelas
     weekly_table = tables[0]
     monthly_table = tables[1]
 
     # Função auxiliar para extrair dados de tabelas
-    def extract_table_data(table):
+    def extract_table_data(table, table_name):
+        st.write(f"📋 Extraindo dados da tabela: {table_name}")
         rows = table.find_all('tr')
         if not rows:
+            st.error(f"🚫 Nenhuma linha encontrada na tabela {table_name}.")
             return [], []
 
         headers = [col.text.strip() for col in rows[0].find_all(['th', 'td'])]
         if not headers:
+            st.error(f"🚫 Nenhum cabeçalho encontrado na tabela {table_name}.")
             return [], []
 
         data = []
@@ -83,16 +91,18 @@ def extract_data():
             if len(cols) > len(headers):
                 cols = cols[:len(headers)]
             data.append(cols)
+        st.write(f"✅ Extraídos {len(data)} registros da tabela {table_name}.")
         return headers, data
 
-    weekly_headers, weekly_data = extract_table_data(weekly_table)
-    monthly_headers, monthly_data = extract_table_data(monthly_table)
+    weekly_headers, weekly_data = extract_table_data(weekly_table, "Semanal")
+    monthly_headers, monthly_data = extract_table_data(monthly_table, "Mensal")
 
     if not weekly_data or not monthly_data:
-        st.error("Dados não encontrados nas tabelas.")
+        st.error("🚫 Dados não encontrados nas tabelas.")
         return None, None
 
     # Criar DataFrames
+    st.write("📊 Criando DataFrames...")
     weekly_df = pd.DataFrame(weekly_data, columns=weekly_headers)
     monthly_df = pd.DataFrame(monthly_data, columns=monthly_headers)
 
@@ -109,16 +119,22 @@ def extract_data():
     }, inplace=True)
 
     # Limpar e converter valores numéricos
+    st.write("🧹 Limpando e convertendo valores numéricos...")
     for df in [weekly_df, monthly_df]:
         for col in df.columns:
             if 'valor' in col.lower():
-                df[col] = pd.to_numeric(df[col].str.replace('.', '').str.replace(',', '.'), errors='coerce')
+                try:
+                    df[col] = pd.to_numeric(df[col].str.replace('.', '').str.replace(',', '.'), errors='coerce')
+                except Exception as e:
+                    st.error(f"❌ Erro ao converter a coluna '{col}': {str(e)}")
+                    return None, None
 
     # Adicionar data de atualização
     update_date = datetime.now()
     weekly_df['Data'] = update_date
     monthly_df['Data'] = update_date
 
+    st.write("✅ Dados extraídos e processados com sucesso!")
     return weekly_df, monthly_df
 
 # Função para atualizar dados históricos
