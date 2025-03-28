@@ -19,6 +19,7 @@ def initialize_driver():
     chrome_options.add_argument("--no-sandbox")  # Necessário para ambientes Linux como o Streamlit Cloud
     chrome_options.add_argument("--disable-dev-shm-usage")  # Evita problemas de recursos em contêineres
     chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")  # Evita detecção de bots
+    chrome_options.add_argument("accept-language=en-US,en;q=0.9")  # Adiciona cabeçalho de idioma
 
     try:
         service = Service(ChromeDriverManager().install())
@@ -42,7 +43,7 @@ def extract_data():
     try:
         st.write("⏳ Carregando a página...")
         driver.get(url)
-        WebDriverWait(driver, 15).until(
+        WebDriverWait(driver, 30).until(  # Aumentado para 30 segundos
             EC.presence_of_element_located((By.TAG_NAME, "table"))
         )
         time.sleep(5)  # Espera adicional para garantir que a página carregue completamente
@@ -124,7 +125,7 @@ def extract_data():
         for col in df.columns:
             if 'valor' in col.lower():
                 try:
-                    df[col] = pd.to_numeric(df[col].str.replace('.', '').str.replace(',', '.'), errors='coerce')
+                    df[col] = pd.to_numeric(df[col].str.replace(r'[^\d,.]', '', regex=True).str.replace(',', '.'), errors='coerce')
                 except Exception as e:
                     st.error(f"❌ Erro ao converter a coluna '{col}': {str(e)}")
                     return None, None
@@ -157,7 +158,7 @@ def update_historical_data(weekly_df, monthly_df):
     return pd.read_csv(weekly_file), pd.read_csv(monthly_file)
 
 # Dashboard no Streamlit
-st.title("Dashboard Balança Comercial")
+st.title("Balança Comercial Brasileira")  # Título atualizado
 st.markdown("Visualize os dados de exportações e importações da Balança Comercial Brasileira.")
 
 if st.button("Atualizar Dados"):
@@ -197,6 +198,6 @@ if not weekly_historical.empty and 'Período' in weekly_historical.columns and '
     st.subheader("Evolução das Exportações Semanais")
     st.line_chart(weekly_historical.set_index('Período')[['EXPORTAÇÕES Valor']].rename(columns={'EXPORTAÇÕES Valor': 'Exportações (US$)'}))
 
-if not monthly_historical.empty and 'Mês' in monthly_historical.columns and 'EXPORTAÇÕES Valor' in monthly_historical.columns:
+if not monthly_historical.empty and 'Mês' in monthly_historical.columns and 'EXPORTAÇÕES Valor' in weekly_historical.columns:
     st.subheader("Evolução das Exportações Mensais")
     st.line_chart(monthly_historical.set_index('Mês')[['EXPORTAÇÕES Valor']].rename(columns={'EXPORTAÇÕES Valor': 'Exportações (US$)'}))
