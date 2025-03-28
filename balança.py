@@ -20,11 +20,11 @@ def initialize_driver():
     chrome_options.add_argument("--disable-dev-shm-usage")  # Evita problemas de recursos em contêineres
     chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")  # Evita detecção de bots
     chrome_options.add_argument("accept-language=en-US,en;q=0.9")  # Adiciona cabeçalho de idioma
+    chrome_options.add_argument("accept-encoding=gzip, deflate, br")  # Adiciona cabeçalho de codificação
 
     try:
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=chrome_options)
-        st.write("✅ ChromeDriver inicializado com sucesso.")
         return driver
     except Exception as e:
         st.error(f"❌ Erro ao inicializar o ChromeDriver: {str(e)}")
@@ -33,7 +33,6 @@ def initialize_driver():
 # Função para extrair dados da página
 def extract_data():
     url = "https://balanca.economia.gov.br/balanca/pg_principal_bc/principais_resultados.html"
-    st.write(f"📡 Acessando a URL: {url}")
     
     driver = initialize_driver()
     if driver is None:
@@ -41,14 +40,12 @@ def extract_data():
         return None, None
 
     try:
-        st.write("⏳ Carregando a página...")
         driver.get(url)
-        WebDriverWait(driver, 30).until(  # Aumentado para 30 segundos
+        WebDriverWait(driver, 30).until(
             EC.presence_of_element_located((By.TAG_NAME, "table"))
         )
         time.sleep(5)  # Espera adicional para garantir que a página carregue completamente
         html = driver.page_source
-        st.write(f"✅ Página carregada com sucesso. Tamanho do HTML: {len(html)} bytes")
     except Exception as e:
         st.error(f"❌ Erro ao acessar a página: {str(e)}")
         driver.quit()
@@ -57,13 +54,11 @@ def extract_data():
         driver.quit()
 
     # Parsing do HTML
-    st.write("🔍 Analisando o HTML...")
     soup = BeautifulSoup(html, 'html.parser')
     tables = soup.find_all('table')
     if len(tables) < 2:
-        st.error(f"🚫 Esperava-se 2 tabelas, mas foram encontradas {len(tables)}. Verifique se a estrutura da página mudou.")
+        st.error(f"🚫 Esperava-se pelo menos 2 tabelas, mas foram encontradas {len(tables)}. Verifique se a estrutura da página mudou.")
         return None, None
-    st.write(f"✅ Encontradas {len(tables)} tabelas.")
 
     # Extrair tabelas
     weekly_table = tables[0]
@@ -71,7 +66,6 @@ def extract_data():
 
     # Função auxiliar para extrair dados de tabelas
     def extract_table_data(table, table_name):
-        st.write(f"📋 Extraindo dados da tabela: {table_name}")
         rows = table.find_all('tr')
         if not rows:
             st.error(f"🚫 Nenhuma linha encontrada na tabela {table_name}.")
@@ -92,7 +86,6 @@ def extract_data():
             if len(cols) > len(headers):
                 cols = cols[:len(headers)]
             data.append(cols)
-        st.write(f"✅ Extraídos {len(data)} registros da tabela {table_name}.")
         return headers, data
 
     weekly_headers, weekly_data = extract_table_data(weekly_table, "Semanal")
@@ -103,7 +96,6 @@ def extract_data():
         return None, None
 
     # Criar DataFrames
-    st.write("📊 Criando DataFrames...")
     weekly_df = pd.DataFrame(weekly_data, columns=weekly_headers)
     monthly_df = pd.DataFrame(monthly_data, columns=monthly_headers)
 
@@ -120,7 +112,6 @@ def extract_data():
     }, inplace=True)
 
     # Limpar e converter valores numéricos
-    st.write("🧹 Limpando e convertendo valores numéricos...")
     for df in [weekly_df, monthly_df]:
         for col in df.columns:
             if 'valor' in col.lower():
@@ -135,7 +126,6 @@ def extract_data():
     weekly_df['Data'] = update_date
     monthly_df['Data'] = update_date
 
-    st.write("✅ Dados extraídos e processados com sucesso!")
     return weekly_df, monthly_df
 
 # Função para atualizar dados históricos
@@ -158,7 +148,7 @@ def update_historical_data(weekly_df, monthly_df):
     return pd.read_csv(weekly_file), pd.read_csv(monthly_file)
 
 # Dashboard no Streamlit
-st.title("Balança Comercial Brasileira")  # Título atualizado
+st.title("Balança Comercial Brasileira")
 st.markdown("Visualize os dados de exportações e importações da Balança Comercial Brasileira.")
 
 if st.button("Atualizar Dados"):
@@ -198,6 +188,6 @@ if not weekly_historical.empty and 'Período' in weekly_historical.columns and '
     st.subheader("Evolução das Exportações Semanais")
     st.line_chart(weekly_historical.set_index('Período')[['EXPORTAÇÕES Valor']].rename(columns={'EXPORTAÇÕES Valor': 'Exportações (US$)'}))
 
-if not monthly_historical.empty and 'Mês' in monthly_historical.columns and 'EXPORTAÇÕES Valor' in weekly_historical.columns:
+if not monthly_historical.empty and 'Mês' in monthly_historical.columns and 'EXPORTAÇÕES Valor' in monthly_historical.columns:
     st.subheader("Evolução das Exportações Mensais")
     st.line_chart(monthly_historical.set_index('Mês')[['EXPORTAÇÕES Valor']].rename(columns={'EXPORTAÇÕES Valor': 'Exportações (US$)'}))
