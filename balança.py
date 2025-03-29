@@ -21,6 +21,7 @@ def initialize_driver():
     chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")  # Evita detecção de bots
     chrome_options.add_argument("accept-language=en-US,en;q=0.9")  # Adiciona cabeçalho de idioma
     chrome_options.add_argument("accept-encoding=gzip, deflate, br")  # Adiciona cabeçalho de codificação
+    chrome_options.add_argument("referer=https://www.google.com/")  # Adiciona cabeçalho de referer
 
     try:
         service = Service(ChromeDriverManager().install())
@@ -30,28 +31,36 @@ def initialize_driver():
         st.error(f"❌ Erro ao inicializar o ChromeDriver: {str(e)}")
         return None
 
-# Função para extrair dados da página
+# Função para extrair dados da página com retry
 def extract_data():
     url = "https://balanca.economia.gov.br/balanca/pg_principal_bc/principais_resultados.html"
-    
-    driver = initialize_driver()
-    if driver is None:
-        st.error("🚫 Falha ao inicializar o driver. Não é possível prosseguir.")
-        return None, None
+    max_retries = 3
+    retry_delay = 5  # segundos
 
-    try:
-        driver.get(url)
-        WebDriverWait(driver, 30).until(
-            EC.presence_of_element_located((By.TAG_NAME, "table"))
-        )
-        time.sleep(5)  # Espera adicional para garantir que a página carregue completamente
-        html = driver.page_source
-    except Exception as e:
-        st.error(f"❌ Erro ao acessar a página: {str(e)}")
-        driver.quit()
-        return None, None
-    finally:
-        driver.quit()
+    for attempt in range(max_retries):
+        driver = initialize_driver()
+        if driver is None:
+            st.error("🚫 Falha ao inicializar o driver. Não é possível prosseguir.")
+            return None, None
+
+        try:
+            st.write(f"📡 Tentativa {attempt + 1}/{max_retries}: Acessando a URL: {url}")
+            driver.get(url)
+            WebDriverWait(driver, 30).until(
+                EC.presence_of_element_located((By.TAG_NAME, "table"))
+            )
+            time.sleep(10)  # Aumentado para 10 segundos para garantir que a página carregue completamente
+            html = driver.page_source
+            st.write(f"✅ Página carregada com sucesso. Tamanho do HTML: {len(html)} bytes")
+            break  # Sai do loop se a página carregar com sucesso
+        except Exception as e:
+            st.error(f"❌ Erro ao acessar a página na tentativa {attempt + 1}/{max_retries}: {str(e)}")
+            if attempt == max_retries - 1:  # Última tentativa
+                driver.quit()
+                return None, None
+            time.sleep(retry_delay)  # Espera antes de tentar novamente
+        finally:
+            driver.quit()
 
     # Parsing do HTML
     soup = BeautifulSoup(html, 'html.parser')
@@ -59,10 +68,33 @@ def extract_data():
     if len(tables) < 2:
         st.error(f"🚫 Esperava-se pelo menos 2 tabelas, mas foram encontradas {len(tables)}. Verifique se a estrutura da página mudou.")
         return None, None
+    st.write(f"✅ Encontradas {len(tables)} tabelas.")
 
-    # Extrair tabelas
-    weekly_table = tables[0]
-    monthly_table = tables[1]
+    # Função auxiliar para verificar se a tabela contém os cabeçalhos esperados
+    def has_expected_headers(table, expected_headers):
+        rows = table.find_all('tr')
+        if not rows:
+            return False
+        headers = [col.text.strip().lower() for col in rows[0].find_all(['th', 'td'])]
+        return any(header in expected_headers for header in headers)
+
+    # Identificar as tabelas corretas
+    weekly_table = None
+    monthly_table = None
+    weekly_headers_expected = ['período', 'exportações', 'importações']
+    monthly_headers_expected = ['mês', 'exportações', 'importações']
+
+    for table in tables:
+        if has_expected_headers(table, weekly_headers_expected) and weekly_table is None:
+            weekly_table = table
+        elif has_expected_headers(table, monthly_headers_expected) and monthly_table is None:
+            monthly_table = table
+        if weekly_table and monthly_table:
+            break
+
+    if not weekly_table or not monthly_table:
+        st.error("🚫 Não foi possível identificar as tabelas Semanal e Mensal com os cabeçalhos esperados.")
+        return None, None
 
     # Função auxiliar para extrair dados de tabelas
     def extract_table_data(table, table_name):
@@ -86,6 +118,7 @@ def extract_data():
             if len(cols) > len(headers):
                 cols = cols[:len(headers)]
             data.append(cols)
+        st.write(f"✅ Extraídos {len(data)} registros da tabela {table_name}.")
         return headers, data
 
     weekly_headers, weekly_data = extract_table_data(weekly_table, "Semanal")
