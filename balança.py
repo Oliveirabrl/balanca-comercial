@@ -203,8 +203,17 @@ else:
 # Calcular variação percentual
 if not weekly_historical.empty and 'EXPORTAÇÕES Valor' in weekly_historical.columns and pd.api.types.is_numeric_dtype(weekly_historical['EXPORTAÇÕES Valor']):
     weekly_historical['Variação % Exportações'] = weekly_historical['EXPORTAÇÕES Valor'].pct_change() * 100
+    # Substituir NaN por "N/A" para evitar problemas de renderização
+    weekly_historical['Variação % Exportações'] = weekly_historical['Variação % Exportações'].fillna("N/A")
 if not monthly_historical.empty and 'EXPORTAÇÕES Valor' in monthly_historical.columns and pd.api.types.is_numeric_dtype(monthly_historical['EXPORTAÇÕES Valor']):
     monthly_historical['Variação % Exportações'] = monthly_historical['EXPORTAÇÕES Valor'].pct_change() * 100
+    monthly_historical['Variação % Exportações'] = monthly_historical['Variação % Exportações'].fillna("N/A")
+
+# Converter a coluna 'Data' para string para evitar problemas de renderização
+if not weekly_historical.empty and 'Data' in weekly_historical.columns:
+    weekly_historical['Data'] = weekly_historical['Data'].astype(str)
+if not monthly_historical.empty and 'Data' in monthly_historical.columns:
+    monthly_historical['Data'] = monthly_historical['Data'].astype(str)
 
 # Exibir tabelas
 st.subheader("Dados Semanais")
