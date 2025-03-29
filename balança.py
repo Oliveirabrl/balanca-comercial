@@ -173,8 +173,11 @@ def update_historical_data(weekly_df, monthly_df):
         historical = pd.read_csv(file)
         # Concatenar os dados novos com os históricos
         historical = pd.concat([historical, df])
+        # Converter a coluna 'Data' para datetime, lidando com valores inválidos
+        historical['Data'] = pd.to_datetime(historical['Data'], errors='coerce')
+        # Remover linhas com 'Data' inválida (NaT)
+        historical = historical.dropna(subset=['Data'])
         # Remover duplicatas, mantendo o registro mais recente (baseado na coluna 'Data')
-        historical['Data'] = pd.to_datetime(historical['Data'])
         historical = historical.sort_values('Data').drop_duplicates(subset=[df.columns[0]], keep='last')
         historical.to_csv(file, index=False)
 
