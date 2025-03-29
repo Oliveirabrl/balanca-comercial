@@ -18,13 +18,14 @@ def initialize_driver():
     chrome_options.add_argument("--headless")  # Modo headless para ambientes sem interface gráfica
     chrome_options.add_argument("--no-sandbox")  # Necessário para ambientes Linux como o Streamlit Cloud
     chrome_options.add_argument("--disable-dev-shm-usage")  # Evita problemas de recursos em contêineres
-    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")  # Evita detecção de bots
+    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.224 Safari/537.36")  # Evita detecção de bots
     chrome_options.add_argument("accept-language=en-US,en;q=0.9")  # Adiciona cabeçalho de idioma
     chrome_options.add_argument("accept-encoding=gzip, deflate, br")  # Adiciona cabeçalho de codificação
     chrome_options.add_argument("referer=https://www.google.com/")  # Adiciona cabeçalho de referer
 
     try:
-        service = Service(ChromeDriverManager().install())
+        # Forçar o webdriver-manager a usar a versão do ChromeDriver compatível com Chromium 120
+        service = Service(ChromeDriverManager(driver_version="120.0.6099.109").install())
         driver = webdriver.Chrome(service=service, options=chrome_options)
         return driver
     except Exception as e:
@@ -198,9 +199,9 @@ else:
     monthly_historical = pd.read_csv('historico_mensais.csv') if os.path.exists('historico_mensais.csv') else pd.DataFrame()
 
 # Calcular variação percentual
-if not weekly_historical.empty and pd.api.types.is_numeric_dtype(weekly_historical['EXPORTAÇÕES Valor']):
+if not weekly_historical.empty and 'EXPORTAÇÕES Valor' in weekly_historical.columns and pd.api.types.is_numeric_dtype(weekly_historical['EXPORTAÇÕES Valor']):
     weekly_historical['Variação % Exportações'] = weekly_historical['EXPORTAÇÕES Valor'].pct_change() * 100
-if not monthly_historical.empty and pd.api.types.is_numeric_dtype(monthly_historical['EXPORTAÇÕES Valor']):
+if not monthly_historical.empty and 'EXPORTAÇÕES Valor' in monthly_historical.columns and pd.api.types.is_numeric_dtype(monthly_historical['EXPORTAÇÕES Valor']):
     monthly_historical['Variação % Exportações'] = monthly_historical['EXPORTAÇÕES Valor'].pct_change() * 100
 
 # Exibir tabelas
