@@ -24,7 +24,6 @@ def initialize_driver():
     chrome_options.add_argument("referer=https://www.google.com/")  # Adiciona cabeçalho de referer
 
     try:
-        # Forçar o webdriver-manager a usar a versão do ChromeDriver compatível com Chromium 120
         service = Service(ChromeDriverManager(driver_version="120.0.6099.109").install())
         driver = webdriver.Chrome(service=service, options=chrome_options)
         return driver
@@ -45,14 +44,12 @@ def extract_data():
             return None, None
 
         try:
-            st.write(f"📡 Tentativa {attempt + 1}/{max_retries}: Acessando a URL: {url}")
             driver.get(url)
             WebDriverWait(driver, 30).until(
                 EC.presence_of_element_located((By.TAG_NAME, "table"))
             )
             time.sleep(10)  # Aumentado para 10 segundos para garantir que a página carregue completamente
             html = driver.page_source
-            st.write(f"✅ Página carregada com sucesso. Tamanho do HTML: {len(html)} bytes")
             break  # Sai do loop se a página carregar com sucesso
         except Exception as e:
             st.error(f"❌ Erro ao acessar a página na tentativa {attempt + 1}/{max_retries}: {str(e)}")
@@ -69,7 +66,6 @@ def extract_data():
     if len(tables) < 2:
         st.error(f"🚫 Esperava-se pelo menos 2 tabelas, mas foram encontradas {len(tables)}. Verifique se a estrutura da página mudou.")
         return None, None
-    st.write(f"✅ Encontradas {len(tables)} tabelas.")
 
     # Função auxiliar para verificar se a tabela contém os cabeçalhos esperados
     def has_expected_headers(table, expected_headers):
@@ -119,7 +115,6 @@ def extract_data():
             if len(cols) > len(headers):
                 cols = cols[:len(headers)]
             data.append(cols)
-        st.write(f"✅ Extraídos {len(data)} registros da tabela {table_name}.")
         return headers, data
 
     weekly_headers, weekly_data = extract_table_data(weekly_table, "Semanal")
@@ -155,8 +150,8 @@ def extract_data():
                     st.error(f"❌ Erro ao converter a coluna '{col}': {str(e)}")
                     return None, None
 
-    # Adicionar data de atualização
-    update_date = datetime.now()
+    # Adicionar data de atualização com data e hora completas
+    update_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     weekly_df['Data'] = update_date
     monthly_df['Data'] = update_date
 
@@ -176,7 +171,11 @@ def update_historical_data(weekly_df, monthly_df):
     # Atualizar arquivos
     for file, df in [(weekly_file, weekly_df), (monthly_file, monthly_df)]:
         historical = pd.read_csv(file)
-        historical = pd.concat([historical, df]).drop_duplicates(subset=[df.columns[0], 'Data'])
+        # Concatenar os dados novos com os históricos
+        historical = pd.concat([historical, df])
+        # Remover duplicatas, mantendo o registro mais recente (baseado na coluna 'Data')
+        historical['Data'] = pd.to_datetime(historical['Data'])
+        historical = historical.sort_values('Data').drop_duplicates(subset=[df.columns[0]], keep='last')
         historical.to_csv(file, index=False)
 
     return pd.read_csv(weekly_file), pd.read_csv(monthly_file)
